@@ -23,7 +23,7 @@ public class PersyTelegramBot extends TelegramLongPollingBot {
     public void onUpdateReceived(Update update) {
         if (update.hasMessage() && update.getMessage().hasText()) {
             Message message = update.getMessage();
-            String chatId = message.getChatId().toString();
+            long chatId = message.getChatId();
             String text = message.getText();
 
             if (text.startsWith("/")) {

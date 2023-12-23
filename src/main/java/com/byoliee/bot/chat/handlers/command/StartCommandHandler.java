@@ -17,7 +17,7 @@ public class StartCommandHandler extends CommandHandler {
 
     @Override
     public void handle(CommandContext context) throws TelegramApiException {
-        SendMessage msg = new SendMessage(context.chatId(), answerTemplate);
+        SendMessage msg = new SendMessage(String.valueOf(context.chatId()), answerTemplate);
         msg.enableMarkdown(true);
         this.bot.execute(msg);
     }

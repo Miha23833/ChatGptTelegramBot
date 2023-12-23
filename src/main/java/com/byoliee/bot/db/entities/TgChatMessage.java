@@ -1,9 +1,12 @@
 package com.byoliee.bot.db.entities;
 
+import com.theokanning.openai.completion.chat.ChatMessage;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.telegram.telegrambots.meta.api.objects.Message;
 
@@ -12,18 +15,20 @@ import java.util.Objects;
 
 @Entity
 @Table(name = "chat_message")
-public class ChatMessage {
+@NoArgsConstructor
+@AllArgsConstructor
+public class TgChatMessage {
+    public static TgChatMessage fromTelegramMessage(Message message, String role) {
+        return new TgChatMessage(new ChatMessageId(message.getChatId(), message.getMessageId()), message.getText(), role);
+    }
+
     @EmbeddedId
     private ChatMessageId id;
 
     @Getter@Setter
     private String content;
-
-    public ChatMessage() {}
-    public ChatMessage(ChatMessageId id, String content) {
-        this.id = id;
-        this.content = content;
-    }
+    @Getter@Setter
+    private String role;
 
     public static class ChatMessageId implements Serializable {
         @Getter
@@ -52,7 +57,7 @@ public class ChatMessage {
         }
     }
 
-    public static ChatMessage fromTelegramMessage(Message message) {
-        return new ChatMessage(new ChatMessageId(message.getChatId(), message.getMessageId()), message.getText());
+    public ChatMessage toChatMessage() {
+        return new ChatMessage(this.role, this.content);
     }
 }
