@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @Service
 public class TemplateStorage {
@@ -25,8 +26,7 @@ public class TemplateStorage {
 
     public String getTemplate(String templateName) {
         try {
-            Resource resource = resourceLoader.getResource("classpath:" + templatesDir + File.separator + templateName);
-            Path path = resource.getFile().toPath();
+            Path path = Paths.get(templatesDir, templateName);
             return Files.readString(path);
         } catch (IOException e) {
             throw new RuntimeException();
