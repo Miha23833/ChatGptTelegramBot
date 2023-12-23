@@ -2,6 +2,7 @@ package com.byoliee.bot.template.message;
 
 import com.byoliee.bot.config.TemplateStorageConfig;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,8 @@ public class TemplateStorage {
 
     public String getTemplate(String templateName) {
         try {
-            Resource resource = resourceLoader.getResource("classpath:" + templatesDir + "/" + templateName);
+            ClassLoader classLoader = getClass().getClassLoader();
+            Resource resource = new ClassPathResource(templatesDir + "/" + templateName, classLoader);
             Path path = resource.getFile().toPath();
             return Files.readString(path);
         } catch (IOException e) {
