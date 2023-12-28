@@ -3,13 +3,16 @@ package com.byoliee.bot.chat.handlers.plaintext;
 import com.byoliee.bot.config.ChatGptConfiguration;
 import com.byoliee.bot.db.DbMessageService;
 import com.byoliee.bot.db.entities.TgChatMessage;
+import com.didalgo.gpt3.ModelType;
+import com.didalgo.gpt3.TokenCount;
 import com.theokanning.openai.completion.chat.ChatCompletionChunk;
 import com.theokanning.openai.completion.chat.ChatCompletionRequest;
 import com.theokanning.openai.completion.chat.ChatMessage;
 import com.theokanning.openai.completion.chat.ChatMessageRole;
 import com.theokanning.openai.service.OpenAiService;
 import io.reactivex.subscribers.DefaultSubscriber;
-import lombok.SneakyThrows;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -22,10 +25,13 @@ import java.util.List;
 
 @Component
 public class ChatGptPlainTextHandler extends PlainTextHandler {
+    private static final Logger logger = LoggerFactory.getLogger(ChatGptPlainTextHandler.class);
+
     private final OpenAiService openAiService;
     private final DbMessageService dbMessageService;
     private final int maxHistoryLength;
     private final int streamMessageUpdateMillis;
+    private final int maxTokens;
 
     @Autowired
     public ChatGptPlainTextHandler(OpenAiService openAiService, DbMessageService dbMessageService, ChatGptConfiguration chatGptConfiguration) {
@@ -34,6 +40,8 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
 
         this.maxHistoryLength = chatGptConfiguration.getMaxHistoryLength();
         this.streamMessageUpdateMillis = chatGptConfiguration.getStreamMessageUpdateMillis();
+
+        this.maxTokens = chatGptConfiguration.getMaxTokens();
     }
 
     @Override
@@ -41,6 +49,7 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
         saveMessageToDb(TgChatMessage.fromTelegramMessage(context.event().getMessage(), ChatMessageRole.USER.value()));
         List<TgChatMessage> history = getLastMessages(context.event().getMessage().getChatId());
         Collections.reverse(history);
+        trimMessagesToTokenLimit(history, this.maxTokens);
 
         Message answer = sendFeatureAnswer(context.chatId());
 
@@ -68,7 +77,7 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
     private ChatCompletionRequest buildChatCompletionRequest(List<ChatMessage> chatMessages) {
         return ChatCompletionRequest.builder()
                 .messages(chatMessages)
-                .model("gpt-3.5-turbo")
+                .model(ModelType.GPT_3_5_TURBO.modelName())
                 .stream(true).build();
     }
 
@@ -78,6 +87,21 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
                 .text("...")
                 .build();
         return bot.execute(sendMessage);
+    }
+
+    private void trimMessagesToTokenLimit(List<TgChatMessage> messages, int maxTokens) {
+        int totalTokens = calculateTotalTokens(messages);
+
+        while (totalTokens > maxTokens && !messages.isEmpty()) {
+            messages.remove(messages.size() - 1);
+            totalTokens = calculateTotalTokens(messages);
+        }
+    }
+
+    private int calculateTotalTokens(List<TgChatMessage> messages) {
+        return messages.stream()
+                .mapToInt(message -> TokenCount.fromString(message.getContent(), ModelType.GPT_3_5_TURBO.getTokenizer()))
+                .sum();
     }
 
     private class MessageStreamSubscriber extends DefaultSubscriber<ChatCompletionChunk> {
@@ -96,15 +120,17 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
         @Override
         public void onNext(ChatCompletionChunk chatCompletionChunk) {
             String text = chatCompletionChunk.getChoices().get(0).getMessage().getContent();
-            if (text != null) {
+            if (text != null && text.length() > 0) {
                 builder.append(text);
             }
             if (System.currentTimeMillis() - lastUpdatedMessageTimeMillis >= ChatGptPlainTextHandler.this.streamMessageUpdateMillis) {
-                EditMessageText edit = createEditMessageText()
-                        .text(builder.toString())
-                        .build();
-                updateMessage(edit);
-                lastUpdatedMessageTimeMillis = System.currentTimeMillis();
+                if (!builder.isEmpty()) {
+                    EditMessageText edit = createEditMessageText()
+                            .text(builder.toString())
+                            .build();
+                    updateMessage(edit);
+                    lastUpdatedMessageTimeMillis = System.currentTimeMillis();
+                }
             }
         }
 
@@ -114,6 +140,7 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
                     .text("Произошла непредвиденная ошибка")
                     .build();
             updateMessage(edit);
+            logger.error(t.getMessage(), t);
             throw new RuntimeException(t);
         }
 
@@ -127,10 +154,12 @@ public class ChatGptPlainTextHandler extends PlainTextHandler {
             updateMessage(edit);
         }
 
-        @SneakyThrows
         private void updateMessage(EditMessageText edit) {
-//            edit.enableMarkdown(true);
-            ChatGptPlainTextHandler.this.bot.execute(edit);
+            try {
+                ChatGptPlainTextHandler.this.bot.execute(edit);
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+            }
         }
 
         private EditMessageText.EditMessageTextBuilder createEditMessageText() {

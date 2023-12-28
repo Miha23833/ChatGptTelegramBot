@@ -35,6 +35,10 @@ public class ChatGptConfiguration {
     @Value("${chatgpt.streamMessageUpdateMillis}")
     private int streamMessageUpdateMillis;
 
+    @Getter
+    @Value("${chatgpt.maxTokens}")
+    private int maxTokens;
+
     @Bean
     public OpenAiService getOpenAiService() {
         ObjectMapper mapper = defaultObjectMapper();
